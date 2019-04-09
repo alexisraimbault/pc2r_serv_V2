@@ -1,0 +1,99 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes" ?>
+<CodeBlocks_project_file>
+	<FileVersion major="1" minor="6" />
+	<Project>
+		<Option title="Server_en_C" />
+		<Option makefile="makefile" />
+		<Option pch_mode="2" />
+		<Option compiler="gcc" />
+		<Build>
+			<Target title="Debug">
+				<Option output="bin/Debug/Server_en_C" prefix_auto="1" extension_auto="1" />
+				<Option object_output="obj/Debug/" />
+				<Option type="1" />
+				<Option compiler="gcc" />
+				<Compiler>
+					<Add option="-g" />
+				</Compiler>
+			</Target>
+			<Target title="Release">
+				<Option output="bin/Release/Server_en_C" prefix_auto="1" extension_auto="1" />
+				<Option object_output="obj/Release/" />
+				<Option type="1" />
+				<Option compiler="gcc" />
+				<Compiler>
+					<Add option="-O2" />
+				</Compiler>
+				<Linker>
+					<Add option="-s" />
+				</Linker>
+			</Target>
+		</Build>
+		<Compiler>
+			<Add option="-Wall" />
+		</Compiler>
+		<Unit filename="Server_en_C.cbp" />
+		<Unit filename="Server_en_C.depend" />
+		<Unit filename="Server_en_C.layout" />
+		<Unit filename="automaton.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="automaton.h" />
+		<Unit filename="broadcastlist.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="broadcastlist.h" />
+		<Unit filename="environment.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="environment.h" />
+		<Unit filename="event.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="event.h" />
+		<Unit filename="fthread.h" />
+		<Unit filename="fthread_internal.h" />
+		<Unit filename="game.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="game.h" />
+		<Unit filename="instruction.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="linked_list.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="linked_list.h" />
+		<Unit filename="locklist.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="locklist.h" />
+		<Unit filename="main.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="makefile" />
+		<Unit filename="scheduler.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="scheduler.h" />
+		<Unit filename="thread.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="thread.h" />
+		<Unit filename="thread_list.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="thread_list.h" />
+		<Unit filename="threadlist.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="threadlist.h" />
+		<Unit filename="trace.h" />
+		<Unit filename="verify.h" />
+		<Extensions>
+			<code_completion />
+			<envvars />
+			<debugger />
+		</Extensions>
+	</Project>
+</CodeBlocks_project_file>
