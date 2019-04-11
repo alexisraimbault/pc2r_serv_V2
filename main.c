@@ -60,12 +60,42 @@ void messageStart(void * args)
 {
     SOCKET msgsock = (SOCKET)args;
     int retval1;
-    char str[24] = "game starting...";
+    char str[24] = "START/";
     retval1 = send(msgsock, str, 24, 0);
     if (retval1 == SOCKET_ERROR)
     {
          fprintf(stderr,"Server: send() failed: error %d\n", WSAGetLastError());
     }
+}
+void allMessageStart(void * args)
+{
+    int retval1;
+    char str[24] = "START/";
+    if (game->players !=NULL){
+        Player *tmp = game->players;
+        while(tmp != NULL){
+            tmp->score = 0;
+            tmp->vx = 0;
+            tmp->vy = 0;
+            retval1 = send(tmp->sock, str, 24, 0);
+            if (retval1 == SOCKET_ERROR)
+            {
+                 fprintf(stderr,"Server: send() failed in allMessageStart: error %d\n", WSAGetLastError());
+            }
+            tmp = tmp->next;
+        }
+    }
+    phase = 1;
+}
+
+void attente(void * args){
+    start = clock();
+
+
+    while((clock()-start)/CLOCKS_PER_SEC < 5 ){
+        Sleep(1000);
+    }
+    pthread_create (& th, NULL,allMessageStart, NULL);
 }
 
 void listenClient(void * args)
@@ -211,6 +241,7 @@ void listenClient(void * args)
             distance = sqrt((game->obj->x-xnum)*(game->obj->x-xnum) + (game->obj->y-ynum)*(game->obj->y-ynum));
             if(distance<3)
             {
+
                 char xobj[10];
                 memset(xobj, '\0', sizeof(xobj));
                 char yobj[10];
@@ -263,6 +294,34 @@ void listenClient(void * args)
                 }
                 pthread_mutex_lock(&mutObj);
                 p->score ++;
+
+                if(p->score >= 5){
+                    char messageWin[24];
+                    messageWin[0] = 'W';
+                    messageWin[1] = 'I';
+                    messageWin[2] = 'N';
+                    messageWin[4] = '/';
+                    i = 0;
+                    while(p->name[i]!='/')
+                    {
+                        messageWin[i+5] = p->name[i];
+                        i++;
+                    }
+                    messageWin[i+5] = '/';
+                    if(game->players != NULL){
+                        Player * tmp2 = game->players;
+                        while(tmp2 != NULL){
+                            retval1 = send(tmp2->sock, messageWin, 24, 0);
+                            if (retval1 == SOCKET_ERROR)
+                            {
+                                 fprintf(stderr,"Server: send() failed: error %d\n", WSAGetLastError());
+                            }
+                            tmp2 = tmp2->next;
+                        }
+                    }
+                    phase = 0;
+                    pthread_create (& th, NULL,attente, NULL);
+                }
             }
 
             //printf("test 1 \n");
@@ -498,7 +557,7 @@ void ecoute(void * args)
     char Buffer[128];
     int retval, retval1;
     memset(Buffer, '\0', sizeof(Buffer));
-
+    int joueurExiste = 0;
     retval = recv(msgsock, Buffer, sizeof(Buffer), 0);
     if (retval == SOCKET_ERROR)
           {
@@ -561,159 +620,176 @@ void ecoute(void * args)
         float randx = rc->x;
         float randy = rc->y;
         rc = rc->next;
-        printf("rand : %f - %f\n"), randx, randy;
+
         pthread_mutex_lock(&mut);
-        Player *player = makePlayer(name, msgsock, randx,randy, game->nbPlayers) ;
+
         if(game->players != NULL){
             Player * tmp = game->players;
             while(tmp != NULL){
-                retval1 = send(tmp->sock, msg, sizeof(msg), 0);
-                if (retval1 == SOCKET_ERROR)
+                if (strcmp(tmp->name, name) == 0)
                 {
-                     fprintf(stderr,"Server: send() failed: error %d\n", WSAGetLastError());
+                    joueurExiste = 1;
                 }
-                else
-                     printf("Server: send() is OK in WELCOME.\n");
-
                 tmp = tmp->next;
             }
         }
-        messageVar = 0;
-        addPlayer(game, player);
-        pthread_mutex_unlock(&mut);
-
-        pthread_create (& th, NULL,changeUpdateMessage, NULL);
-        pthread_create (& th, NULL,listenClient, (void*)player);
-        char scores[(game->nbPlayers+1)*24];
-        memset(scores, '_', sizeof(scores));
-        int j;
-        scores[0] = 'W';
-        scores[1] = 'E';
-        scores[2] = 'L';
-        scores[3] = 'C';
-        scores[4] = 'O';
-        scores[5] = 'M';
-        scores[6] = 'E';
-        scores[7] = '/';
-        char nbPlay[(int)floor(log10((double)game->nbPlayers))+1];
-        memset(nbPlay, '_', sizeof(nbPlay));
-        sprintf(nbPlay, "%d", game->nbPlayers);
-
-        if(phase){
-            scores[8] = 'j';
-            scores[9] = 'e';
-            scores[10] = 'u';
-            scores[11] = '/';
-            int l=0;
-            while(l<sizeof(nbPlay))
-            {
-                scores[12+l]=nbPlay[l];
-                l++;
-            }
-            scores[12+l] = '/';
+        if(joueurExiste){
+            retval1 = send(msgsock, "ERR/name_taken__________", 24, 0);
         }
         else{
-            scores[8] = 'a';
-            scores[9] = 't';
-            scores[10] = 't';
-            scores[11] = 'e';
-            scores[12] = 'n';
-            scores[13] = 't';
-            scores[14] = 'e';
-            scores[15] = '/';
-            int l=0;
-            while(l<sizeof(nbPlay))
+            Player *player = makePlayer(name, msgsock, randx,randy, game->nbPlayers) ;
+            if(game->players != NULL){
+                Player * tmp = game->players;
+                while(tmp != NULL){
+                    retval1 = send(tmp->sock, msg, sizeof(msg), 0);
+                    if (retval1 == SOCKET_ERROR)
+                    {
+                         fprintf(stderr,"Server: send() failed: error %d\n", WSAGetLastError());
+                    }
+                    else
+                         printf("Server: send() is OK in WELCOME.\n");
+
+                    tmp = tmp->next;
+                }
+            }
+            messageVar = 0;
+            addPlayer(game, player);
+            pthread_mutex_unlock(&mut);
+
+            pthread_create (& th, NULL,changeUpdateMessage, NULL);
+            pthread_create (& th, NULL,listenClient, (void*)player);
+            char scores[(game->nbPlayers+1)*24];
+            memset(scores, '_', sizeof(scores));
+            int j;
+            scores[0] = 'W';
+            scores[1] = 'E';
+            scores[2] = 'L';
+            scores[3] = 'C';
+            scores[4] = 'O';
+            scores[5] = 'M';
+            scores[6] = 'E';
+            scores[7] = '/';
+            char nbPlay[(int)floor(log10((double)game->nbPlayers))+1];
+            memset(nbPlay, '_', sizeof(nbPlay));
+            sprintf(nbPlay, "%d", game->nbPlayers);
+
+            if(phase){
+                scores[8] = 'j';
+                scores[9] = 'e';
+                scores[10] = 'u';
+                scores[11] = '/';
+                int l=0;
+                while(l<sizeof(nbPlay))
+                {
+                    scores[12+l]=nbPlay[l];
+                    l++;
+                }
+                scores[12+l] = '/';
+            }
+            else{
+                scores[8] = 'a';
+                scores[9] = 't';
+                scores[10] = 't';
+                scores[11] = 'e';
+                scores[12] = 'n';
+                scores[13] = 't';
+                scores[14] = 'e';
+                scores[15] = '/';
+                int l=0;
+                while(l<sizeof(nbPlay))
+                {
+                    scores[16+l]=nbPlay[l];
+                    l++;
+                }
+                scores[16+l] = '/';
+            }
+            char x[5];
+            memset(x, '\0', sizeof(x));
+            char y[5];
+            memset(y, '\0', sizeof(y));
+            if(game->players != NULL){
+                i=1;
+                Player * tmpPlayer = game->players;
+                while(tmpPlayer != NULL){
+                    j=0;
+                    while(tmpPlayer->name[j]!='/')
+                    {
+                        scores[(i*24)+j] = tmpPlayer->name[j];
+                        j++;
+                    }
+                    scores[(i*24)+j] = 'X';
+                    j++;
+                    sprintf(x, "%f", tmpPlayer->x);
+                    for(int k=0; k<sizeof(x);k++)
+                    {
+                        scores[(i*24)+j] = x[k];
+                    j++;
+                    }
+                    scores[(i*24)+j] = 'Y';
+                    j++;
+                    sprintf(y, "%f", tmpPlayer->y);
+                    for(int k=0; k<sizeof(y);k++)
+                    {
+                        scores[(i*24)+j] = y[k];
+                    j++;
+                    }
+                    scores[(i*24)+j] = '|';
+                    tmpPlayer = tmpPlayer->next;
+                    i++;
+                }
+            }
+            retval1 = send(msgsock, scores, sizeof(scores), 0);
+            if (retval1 == SOCKET_ERROR)
             {
-                scores[16+l]=nbPlay[l];
+                 fprintf(stderr,"Server: send() failed: error %d\n", WSAGetLastError());
+            }
+            else
+                 printf("Server: send() is OK.\n");
+            char xobj[10];
+            memset(xobj, '\0', sizeof(xobj));
+            char yobj[10];
+            memset(yobj, '\0', sizeof(yobj));
+            char newObjMessage[48];
+            memset(newObjMessage, '_', sizeof(newObjMessage));
+            /*sprintf(xobj,"%f", xfobj);
+            sprintf(yobj,"%f", yfobj);*/
+            pthread_mutex_lock(&mutObj);
+            gcvt(game->obj->x, 6, xobj);
+            gcvt(game->obj->y, 6, yobj);
+            newObjMessage[0] = 'O';
+            newObjMessage[1] = 'B';
+            newObjMessage[2] = 'J';
+            newObjMessage[3] = 'E';
+            newObjMessage[4] = 'C';
+            newObjMessage[5] = 'T';
+            newObjMessage[6] = 'I';
+            newObjMessage[7] = 'V';
+            newObjMessage[8] = 'E';
+            newObjMessage[9] = '/';
+            newObjMessage[24] = 'x';
+
+            int l=25;
+            for(int k = 0; k<sizeof(xobj);k++)
+            {
+                newObjMessage[l]=xobj[k];
                 l++;
             }
-            scores[16+l] = '/';
-        }
-        char x[5];
-        memset(x, '\0', sizeof(x));
-        char y[5];
-        memset(y, '\0', sizeof(y));
-        if(game->players != NULL){
-            i=1;
-            Player * tmpPlayer = game->players;
-            while(tmpPlayer != NULL){
-                j=0;
-                while(tmpPlayer->name[j]!='/')
-                {
-                    scores[(i*24)+j] = tmpPlayer->name[j];
-                    j++;
-                }
-                scores[(i*24)+j] = 'X';
-                j++;
-                sprintf(x, "%f", tmpPlayer->x);
-                for(int k=0; k<sizeof(x);k++)
-                {
-                    scores[(i*24)+j] = x[k];
-                j++;
-                }
-                scores[(i*24)+j] = 'Y';
-                j++;
-                sprintf(y, "%f", tmpPlayer->y);
-                for(int k=0; k<sizeof(y);k++)
-                {
-                    scores[(i*24)+j] = y[k];
-                j++;
-                }
-                scores[(i*24)+j] = '|';
-                tmpPlayer = tmpPlayer->next;
-                i++;
+            newObjMessage[l] = 'y';
+            l++;
+            for(int k = 0; k<sizeof(yobj); k++)
+            {
+                newObjMessage[l]=yobj[k];
+                l++;
             }
+            newObjMessage[l]='/';
+            retval1 = send(msgsock, newObjMessage, sizeof(newObjMessage), 0);
+            pthread_mutex_unlock(&mutObj);
         }
-        retval1 = send(msgsock, scores, sizeof(scores), 0);
-        if (retval1 == SOCKET_ERROR)
-        {
-             fprintf(stderr,"Server: send() failed: error %d\n", WSAGetLastError());
-        }
-        else
-             printf("Server: send() is OK.\n");
-        char xobj[10];
-        memset(xobj, '\0', sizeof(xobj));
-        char yobj[10];
-        memset(yobj, '\0', sizeof(yobj));
-        char newObjMessage[48];
-        memset(newObjMessage, '_', sizeof(newObjMessage));
-        /*sprintf(xobj,"%f", xfobj);
-        sprintf(yobj,"%f", yfobj);*/
-        pthread_mutex_lock(&mutObj);
-        gcvt(game->obj->x, 6, xobj);
-        gcvt(game->obj->y, 6, yobj);
-        newObjMessage[0] = 'O';
-        newObjMessage[1] = 'B';
-        newObjMessage[2] = 'J';
-        newObjMessage[3] = 'E';
-        newObjMessage[4] = 'C';
-        newObjMessage[5] = 'T';
-        newObjMessage[6] = 'I';
-        newObjMessage[7] = 'V';
-        newObjMessage[8] = 'E';
-        newObjMessage[9] = '/';
-        newObjMessage[24] = 'x';
 
-        int l=25;
-        for(int k = 0; k<sizeof(xobj);k++)
-        {
-            newObjMessage[l]=xobj[k];
-            l++;
+        while(1){
+            //printf("testBoucle\n");
+            Sleep(1000);
         }
-        newObjMessage[l] = 'y';
-        l++;
-        for(int k = 0; k<sizeof(yobj); k++)
-        {
-            newObjMessage[l]=yobj[k];
-            l++;
-        }
-        newObjMessage[l]='/';
-        retval1 = send(msgsock, newObjMessage, sizeof(newObjMessage), 0);
-        pthread_mutex_unlock(&mutObj);
-    }
-    while(1){
-        //printf("testBoucle\n");
-        Sleep(1000);
     }
 }
 
@@ -942,7 +1018,7 @@ int main(int argc, char **argv){
     }
     printf("game starting ...") ;
     printf("player count : %d\n", size(player_list));
-    printf("TEST MAIN 1 \n");
+
     if(player_list->head != NULL){
         Node * tmp = player_list->head;
         while(tmp != NULL){
@@ -950,10 +1026,10 @@ int main(int argc, char **argv){
             tmp = tmp->next;
         }
     }
-    printf("TEST MAIN 2 \n");
-    phase = 1;
+
+    pthread_create (& th, NULL,allMessageStart, NULL);
     Sleep(1);
-    printf("TEST MAIN  3\n");
+
     if(th_list->head != NULL){
         Node_t * tmp_t = th_list->head;
         while(tmp_t != NULL){
@@ -961,7 +1037,7 @@ int main(int argc, char **argv){
             tmp_t = tmp_t->next;
         }
     }
-    printf("TEST MAIN  4\n");
+
 
     return 0;
 
