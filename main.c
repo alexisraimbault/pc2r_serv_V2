@@ -24,6 +24,7 @@
 clock_t start;
 char *updatesMessageSend;
 char planetesMessage[24*3];
+char teleportMessage[24*3];
 
 List * player_list;
 List_t * th_list;
@@ -31,6 +32,7 @@ pthread_t th;
 int firstUpdate = 1;
 int phase ;
 int messageVar = 1;
+int isTeleporter = 0;
 Game * game;
 pthread_mutex_t mut ;//pour que le nombre de joueurs ne change pas pdt l'envoi de l'update
 pthread_mutex_t mutObj ;
@@ -164,6 +166,8 @@ void listenClient(void * args)
             printf("SENDING : %s \n", updatesMessageSend);
             retval1 = send(p->sock, updatesMessageSend, ((2*game->nbPlayers)+1)*24, 0);
             retval1 = send(p->sock, planetesMessage, sizeof(planetesMessage), 0);
+            printf("SENDING : %s \n", teleportMessage);
+            retval1 = send(p->sock, teleportMessage, sizeof(planetesMessage), 0);
 
 
             pthread_mutex_unlock(&message);
@@ -923,7 +927,105 @@ void movePlanetes(void * args)
                 i++;
             }
         }
-        //printf("PLANETES %s\n",planetesMessage);
+    }
+}
+
+void teleporter(void * args){
+    srand(time(NULL));
+    memset(teleportMessage, '_', sizeof(teleportMessage));
+    char x1str[10];
+    char y1str[10];
+    char x2str[10];
+    char y2str[10];
+    double x1, x2, y1, y2, ran;
+    teleportMessage[0]='T';
+    teleportMessage[1]='E';
+    teleportMessage[2]='L';
+    teleportMessage[3]='/';
+    teleportMessage[4]='N';
+    teleportMessage[5]='/';
+    int i,cpt;
+    while(1){
+        ran = (float)rand()/(float)RAND_MAX;
+        //printf("%f\n", ran);
+        if(!isTeleporter){
+
+             if(ran < 0.3 ){
+                    printf("new teleporter\n");
+                    x1 = ((float)rand()/(float)(RAND_MAX))*MAP_SIZE;
+                    x2 = ((float)rand()/(float)(RAND_MAX))*MAP_SIZE;
+                    y1 = ((float)rand()/(float)(RAND_MAX))*MAP_SIZE;
+                    y2 = ((float)rand()/(float)(RAND_MAX))*MAP_SIZE;
+                    memset(x1str, '0', sizeof(x1str));
+                    memset(y1str, '0', sizeof(y1str));
+                    memset(x2str, '0', sizeof(x2str));
+                    memset(y2str, '0', sizeof(y2str));
+                    sprintf(x1str, "%f", x1);
+                    sprintf(y1str, "%f", y1);
+                    sprintf(x2str, "%f", x2);
+                    sprintf(y2str, "%f", y2);
+                    x1str[9] = '/';
+                    y1str[9] = '/';
+                    x2str[9] = '/';
+                    y2str[9] = '/';
+                    i=0;
+                    cpt = 0;
+                    while(x1str[cpt]!='/'){
+                        if( x1str[cpt] != '\0')
+                            teleportMessage [24 + i] = x1str[cpt];
+                        else
+                            teleportMessage [24 + i] = '0';
+                        cpt++;
+                        i++;
+                    }
+                    teleportMessage [24 + i] = '/';
+                    i++;
+                    cpt = 0;
+                    while(y1str[cpt]!='/'){
+                        if( y1str[cpt] != '\0')
+                            teleportMessage [24 + i] = y1str[cpt];
+                        else
+                            teleportMessage [24 + i] = '0';
+                        cpt++;
+                        i++;
+                    }
+                    teleportMessage [24 + i] = '/';
+
+
+                    i=0;
+                    cpt = 0;
+                    while(x2str[cpt]!='/'){
+                        if( x2str[cpt] != '\0')
+                            teleportMessage [48 + i] = x2str[cpt];
+                        else
+                            teleportMessage [48 + i] = '0';
+                        cpt++;
+                        i++;
+                    }
+                    teleportMessage [48 + i] = '/';
+                    i++;
+                    cpt = 0;
+                    while(y2str[cpt]!='/'){
+                        if( y2str[cpt] != '\0')
+                            teleportMessage [48 + i] = y2str[cpt];
+                        else
+                            teleportMessage [48 + i] = '0';
+                        cpt++;
+                        i++;
+                    }
+                    teleportMessage [48 + i] = '/';
+                    teleportMessage[4]='Y';
+                    isTeleporter = 1;
+             }
+        }
+        else{
+            if(ran < 0.05 ){
+                    printf("deleting... \n");
+                    teleportMessage[4]='N';
+                    isTeleporter = 0;
+             }
+        }
+        Sleep(1000);
     }
 }
 
@@ -951,6 +1053,7 @@ int main(int argc, char **argv){
     Planete * p1 = makePlanete(((float)rand()/(float)(RAND_MAX))*MAP_SIZE,((float)rand()/(float)(RAND_MAX))*MAP_SIZE,((float)rand()/(float)(RAND_MAX))*0.00001,((float)rand()/(float)(RAND_MAX))*0.00001);
     Planete * p2 = makePlanete(((float)rand()/(float)(RAND_MAX))*MAP_SIZE,((float)rand()/(float)(RAND_MAX))*MAP_SIZE,((float)rand()/(float)(RAND_MAX))*0.00001,((float)rand()/(float)(RAND_MAX))*0.00001);
     pthread_create (& th, NULL,movePlanetes, NULL);
+    pthread_create (& th, NULL,teleporter, NULL);
     pthread_create (& th, NULL,checkCollisions, NULL);
     p1->next = p2;
     game->planetes = p1;
