@@ -28,7 +28,7 @@ Player * makePlayer(char * n, SOCKET s, float x, float y, int number)
   newPlayer->sock = s;
   newPlayer->num = number;
   newPlayer->next = NULL;
-  newPlayer->score = 2;
+  newPlayer->score = 0;
   return newPlayer;
 }
 
