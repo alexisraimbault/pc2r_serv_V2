@@ -11,11 +11,14 @@ struct player {
   SOCKET sock;
   pthread_mutex_t mut;
   float dir, x, y, vx, vy;
-  int score;
-  int coll;
+  int score, crashed1, crashed2;
+  clock_t crashTime1;
+  clock_t crashTime2;
+  int coll, justUnstuck1, justUnstuck2, justTeleported;
   float vxcoll;
   float vycoll;
   int wait;
+  int deleted;
   int num;
   struct player * next;
 };

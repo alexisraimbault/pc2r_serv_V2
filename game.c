@@ -24,6 +24,11 @@ Player * makePlayer(char * n, SOCKET s, float x, float y, int number)
   newPlayer->coll = 0;
   newPlayer->vxcoll = 0;
   newPlayer->vycoll = 0;
+  newPlayer->crashed1 = 0;
+  newPlayer->crashed2 = 0;
+  newPlayer->justUnstuck1 = 0;
+  newPlayer->justUnstuck2 = 0;
+  newPlayer->deleted = 0;
   newPlayer->mut = pthread_mutex_init(&newPlayer->mut, NULL);
   newPlayer->sock = s;
   newPlayer->num = number;

@@ -15,7 +15,7 @@
 #include "linked_list.h"
 #include "thread_list.h"
 #include "game.h"
-#define MAP_SIZE 50
+#define MAP_SIZE 1000
 
 
 #define DEFAULT_PORT 45678
@@ -25,7 +25,7 @@ clock_t start;
 char *updatesMessageSend;
 char planetesMessage[24*3];
 char teleportMessage[24*3];
-
+double teleportx1, teleportx2, teleporty1, teleporty2;
 List * player_list;
 List_t * th_list;
 pthread_t th;
@@ -33,11 +33,14 @@ int firstUpdate = 1;
 int phase ;
 int messageVar = 1;
 int isTeleporter = 0;
+int freq = 10;
 Game * game;
 pthread_mutex_t mut ;//pour que le nombre de joueurs ne change pas pdt l'envoi de l'update
 pthread_mutex_t mutObj ;
 pthread_mutex_t collision ;
+pthread_mutex_t teleportLock ;
 pthread_mutex_t message ;
+pthread_mutex_t planetesMut ;
 
 typedef struct randCoords{
     double x;
@@ -62,14 +65,14 @@ void messageStart(void * args)
 {
     SOCKET msgsock = (SOCKET)args;
     int retval1;
-    char str[24] = "START/";
+    char str[24] = "SESSION/";
     retval1 = send(msgsock, str, 24, 0);
     if (retval1 == SOCKET_ERROR)
     {
          fprintf(stderr,"Server: send() failed: error %d\n", WSAGetLastError());
     }
 }
-void allMessageStart(void * args)
+void allMessageStart()
 {
     int retval1;
     char str[24] = "START/";
@@ -92,326 +95,14 @@ void allMessageStart(void * args)
 
 void attente(void * args){
     start = clock();
-
-
     while((clock()-start)/CLOCKS_PER_SEC < 5 ){
         Sleep(1000);
     }
-    pthread_create (& th, NULL,allMessageStart, NULL);
+   allMessageStart();
 }
 
-void listenClient(void * args)
+void changeUpdateMessage()
 {
-    char xstr[10];
-    char ystr[10];
-    char vxstr[10];
-    char vystr[10];
-    char scorestr[10];
-    char collisionMessage[24];
-    char x[5];
-    char y[5];
-    char s[5];
-    char Buffer[128];
-    int j,retval1,retval;
-    int tmpcpt, cpt, i, l, cptScore, tmpcoll;
-    double xnum, ynum, vxnum, vynum, distance, distColl, tmpvx, tmpvy;
-    int snum;
-    Player *p = (Player *)args;
-
-    while(1){
-
-        if(phase && messageVar){
-            pthread_mutex_lock(&message);
-            tmpcoll = 0;
-            if(p->coll)
-            {
-                pthread_mutex_lock(&collision);
-
-                memset(collisionMessage, '_', sizeof(collisionMessage));
-                collisionMessage[0] = 'C';
-                collisionMessage[1] = 'O';
-                collisionMessage[2] = 'L';
-                collisionMessage[3] = 'L';
-                collisionMessage[4] = 'V';
-                collisionMessage[5] = '/';
-                memset(xstr, '\0', sizeof(xstr));
-                memset(ystr, '\0', sizeof(ystr));
-                p->vx = p->vxcoll;
-                p->vy = p->vycoll;
-                sprintf(vxstr, "%f", p->vxcoll);
-                sprintf(vystr, "%f", p->vycoll);
-                vxstr[6] = '/';
-                vystr[6] = '/';
-                cpt = 0;
-                while(vxstr[cpt] != '/'){
-                    collisionMessage[cpt + 6] = vxstr[cpt];
-                    cpt++;
-                }
-                tmpcpt = cpt;
-                cpt = 0;
-                collisionMessage[tmpcpt + 6] = '/';
-                tmpcpt++;
-
-                while(vxstr[cpt] != '/'){
-                    collisionMessage[tmpcpt + 6] = vystr[cpt];
-                    cpt++;
-                    tmpcpt++;
-                }
-                collisionMessage[tmpcpt + 6] = '/';
-                printf("SENDING : %s \n", collisionMessage);
-                retval1 = send(p->sock, collisionMessage, 24, 0);
-                pthread_mutex_unlock(&collision);
-                tmpcoll = 1;
-            }
-            printf("SENDING : %s \n", updatesMessageSend);
-            retval1 = send(p->sock, updatesMessageSend, ((2*game->nbPlayers)+1)*24, 0);
-            retval1 = send(p->sock, planetesMessage, sizeof(planetesMessage), 0);
-            printf("SENDING : %s \n", teleportMessage);
-            retval1 = send(p->sock, teleportMessage, sizeof(planetesMessage), 0);
-
-
-            pthread_mutex_unlock(&message);
-            memset(xstr, '\0', sizeof(xstr));
-            memset(ystr, '\0', sizeof(ystr));
-            memset(vxstr, '\0', sizeof(vxstr));
-            memset(vystr, '\0', sizeof(vystr));
-            memset(scorestr, '\0', sizeof(scorestr));
-            memset(Buffer, '\0', sizeof(Buffer));
-            retval = recv(p->sock, Buffer, sizeof(Buffer), 0);
-            if (retval == SOCKET_ERROR)
-                  {
-                fprintf(stderr,"Server: recv() failed: error %d\n", WSAGetLastError());
-                closesocket(p->sock);
-            }
-           else
-                printf("RECEIVING UPDATE : %s .\n", Buffer);
-
-            if (retval == 0)
-            {
-                printf("Server: Client closed connection.\n");
-                closesocket(p->sock);
-
-            }
-            cpt=0;
-            while((cpt < sizeof(Buffer)) && (Buffer[cpt] != '/'))
-            {
-                xstr[cpt] = Buffer[cpt];
-                cpt ++;
-            }
-            xnum = atof(xstr);
-
-            cpt ++;
-            tmpcpt = cpt;
-            while((cpt < sizeof(Buffer)) && (Buffer[cpt] != '/'))
-            {
-                ystr[cpt - tmpcpt] = Buffer[cpt];
-                cpt++;
-            }
-            ynum = atof(ystr);
-            cpt++;
-            tmpcpt = cpt;
-            while((cpt < sizeof(Buffer)) && (Buffer[cpt] != '/'))
-            {
-                scorestr[cpt - tmpcpt] = Buffer[cpt];
-                cpt++;
-            }
-            scorestr[cpt - tmpcpt] ='\0';
-            snum = atoi(scorestr);
-            cpt++;
-            tmpcpt = cpt;
-            while((cpt < sizeof(Buffer)) && (Buffer[cpt] != '/') && (Buffer[cpt] != '/0') )
-            {
-                vxstr[cpt - tmpcpt] = Buffer[cpt];
-                cpt++;
-            }
-            vxnum = atof(vxstr);
-
-            cpt++;
-            tmpcpt = cpt;
-            while((cpt < sizeof(Buffer)) && (Buffer[cpt] != '/')&& (Buffer[cpt] != '/0'))
-            {
-                vystr[cpt - tmpcpt] = Buffer[cpt];
-                cpt++;
-            }
-            vynum = atof(vystr);
-
-            p->x = xnum;
-            p->y = ynum;
-            p->vx = vxnum;
-            p->vy = vynum;
-            if(tmpcoll){
-                p->coll = 0;
-            }
-            distance = sqrt((game->obj->x-xnum)*(game->obj->x-xnum) + (game->obj->y-ynum)*(game->obj->y-ynum));
-            if(distance<3)
-            {
-
-                char xobj[10];
-                memset(xobj, '\0', sizeof(xobj));
-                char yobj[10];
-                memset(yobj, '\0', sizeof(yobj));
-                char newObjMessage[48];
-                memset(newObjMessage, '_', sizeof(newObjMessage));
-                float xfobj = ((float)rand()/(float)(RAND_MAX))*MAP_SIZE;
-                float yfobj = ((float)rand()/(float)(RAND_MAX))*MAP_SIZE;
-                Objectif * obj = makeObjectif(xfobj,yfobj);
-                pthread_mutex_lock(&mutObj);
-                game->obj = obj;
-
-                gcvt(xfobj, 6, xobj);
-                gcvt(yfobj, 6, yobj);
-                newObjMessage[0] = 'O';
-                newObjMessage[1] = 'B';
-                newObjMessage[2] = 'J';
-                newObjMessage[3] = 'E';
-                newObjMessage[4] = 'C';
-                newObjMessage[5] = 'T';
-                newObjMessage[6] = 'I';
-                newObjMessage[7] = 'V';
-                newObjMessage[8] = 'E';
-                newObjMessage[9] = '/';
-                newObjMessage[24] = 'x';
-                int l=25;
-                for(int k = 0; k<sizeof(xobj);k++)
-                {
-                    newObjMessage[l]=xobj[k];
-                    l++;
-                }
-                newObjMessage[l] = 'y';
-                l++;
-                for(int k = 0; k<sizeof(yobj); k++)
-                {
-                    newObjMessage[l]=yobj[k];
-                    l++;
-                }
-                newObjMessage[l]='/';
-                if(game->players != NULL){
-                    Player * tmp2 = game->players;
-                    while(tmp2 != NULL){
-                        retval1 = send(tmp2->sock, newObjMessage, sizeof(newObjMessage), 0);
-                        if (retval1 == SOCKET_ERROR)
-                        {
-                             fprintf(stderr,"Server: send() failed: error %d\n", WSAGetLastError());
-                        }
-                        tmp2 = tmp2->next;
-                    }
-                }
-                pthread_mutex_lock(&mutObj);
-                p->score ++;
-
-                if(p->score >= 5){
-                    char messageWin[24];
-                    messageWin[0] = 'W';
-                    messageWin[1] = 'I';
-                    messageWin[2] = 'N';
-                    messageWin[4] = '/';
-                    i = 0;
-                    while(p->name[i]!='/')
-                    {
-                        messageWin[i+5] = p->name[i];
-                        i++;
-                    }
-                    messageWin[i+5] = '/';
-                    if(game->players != NULL){
-                        Player * tmp2 = game->players;
-                        while(tmp2 != NULL){
-                            retval1 = send(tmp2->sock, messageWin, 24, 0);
-                            if (retval1 == SOCKET_ERROR)
-                            {
-                                 fprintf(stderr,"Server: send() failed: error %d\n", WSAGetLastError());
-                            }
-                            tmp2 = tmp2->next;
-                        }
-                    }
-                    phase = 0;
-                    pthread_create (& th, NULL,attente, NULL);
-                }
-            }
-
-            //printf("test 1 \n");
-            memset(xstr, '\0', sizeof(xstr));
-            memset(ystr, '\0', sizeof(ystr));
-            sprintf(vxstr, "%f", p->vx);
-            sprintf(vystr, "%f", p->vy);
-            vxstr[6] = '/';
-            vystr[6] = '/';
-
-            memset(scorestr, '\0', sizeof(scorestr));
-            memset(x, '\0', sizeof(x));
-            memset(y, '\0', sizeof(y));
-            memset(s, '\0', sizeof(s));
-            pthread_mutex_lock(&message);
-            //int length = ((2*game->nbPlayers)+1)*24;
-            //printf("test 1 \n");
-            //char updatesMessage [length];
-
-            /*for(int cptcpy=0;cptcpy<length;cptcpy++) {
-                printf("test 1 \n");
-                updatesMessage [cptcpy] = updatesMessageSend[cptcpy];
-            }*/
-            j=0;
-            while(p->name[j] != '/')
-            {
-                //updatesMessageSend[((p->num+1)*24)+j] = p->name[j];
-                //updatesMessageSend[((game->nbPlayers)*24)+(i*24)+j] = p->name[j];
-                j++;
-            }
-            //updatesMessageSend[((p->num+1)*24)+j] = 'X';
-            //updatesMessageSend[((game->nbPlayers)*24)+((p->num+1)*24)+j] = ':';
-            j++;
-            sprintf(x, "%f", p->x);
-            sprintf(s, "%d/", p->score);
-            cptScore = j;
-            int cpts = 0;
-            while(s[cpts] != '/')
-            {
-                updatesMessageSend[((game->nbPlayers)*24)+((p->num+1)*24)+cptScore] = s[cpts];
-                cptScore++;
-                cpts++;
-            }
-            updatesMessageSend[((game->nbPlayers)*24)+((p->num+1)*24)+cptScore] = '|';
-            cptScore++;
-            cpts = 0;
-            while(vxstr[cpts] !='/')
-            {
-                updatesMessageSend[((game->nbPlayers)*24)+((p->num+1)*24)+cptScore] = vxstr[cpts];
-                cptScore++;
-                cpts++;
-            }
-            updatesMessageSend[((game->nbPlayers)*24)+((p->num+1)*24)+cptScore] = '|';
-            cptScore++;
-            cpts = 0;
-            while(vystr[cpts] !='/')
-            {
-                updatesMessageSend[((game->nbPlayers)*24)+((p->num+1)*24)+cptScore] = vystr[cpts];
-                cptScore++;
-                cpts++;
-            }
-            for(int k=0; k<sizeof(x);k++)
-            {
-                updatesMessageSend[((p->num+1)*24)+j] = x[k];
-            j++;
-            }
-            //updatesMessage[((p->num+1)*24)+j] = 'Y';
-            j++;
-            sprintf(y, "%f", p->y);
-            for(int k=0; k<sizeof(y);k++)
-            {
-                updatesMessageSend[((p->num+1)*24)+j] = y[k];
-            j++;
-            }
-            //updatesMessage[(i*24)+j] = '|';
-            updatesMessageSend[((game->nbPlayers)*24)+((p->num+1)*24)+cptScore] = '|';
-            pthread_mutex_unlock(&message);
-            //updatesMessageSend = updatesMessage;
-            //printf("test 3 \n");
-        }
-    }
-}
-
-void changeUpdateMessage(void* args)
-{
-    srand(time(NULL));
     char xstr[10];
     char ystr[10];
     char scorestr[10];
@@ -431,23 +122,21 @@ void changeUpdateMessage(void* args)
     char updateMessage[((2*game->nbPlayers)+1)*24];
     memset(updateMessage, '_', ((2*game->nbPlayers)+1)*24);
     cpt = 0;
-    updateMessage[0] = 'U';
-    updateMessage[1] = 'P';
-    updateMessage[2] = 'D';
-    updateMessage[3] = 'A';
-    updateMessage[4] = 'T';
-    updateMessage[5] = 'E';
-    updateMessage[6] = '/';
+    updateMessage[0] = 'T';
+    updateMessage[1] = 'I';
+    updateMessage[2] = 'C';
+    updateMessage[3] = 'K';
+    updateMessage[4] = '/';
     char nbPlay[(int)floor(log10((double)game->nbPlayers))+1];
     memset(nbPlay, '_', sizeof(nbPlay));
     sprintf(nbPlay, "%d", game->nbPlayers);
     l=0;
     while(l<sizeof(nbPlay))
     {
-        updateMessage[7+l]=nbPlay[l];
+        updateMessage[5+l]=nbPlay[l];
         l++;
     }
-    updateMessage[7+l] = '/';
+    updateMessage[5+l] = '/';
     if(game->players != NULL){
         i=1;
         Player * tmpPlayer = game->players;
@@ -540,7 +229,6 @@ void changeUpdateMessage(void* args)
     //updatesMessageSend = (char *)malloc(((2*game->nbPlayers)+1)*24 );
     //updatesMessageSend = &updateMessage[0];
     //free(updatesMessageSend);
-
     //strcpy(updatesMessageSend,updateMessage);
     for(int cptcpy = 0; cptcpy < ((2*game->nbPlayers)+1)*24; cptcpy++){
         updatesMessageSend[cptcpy] = updateMessage[cptcpy];
@@ -550,9 +238,411 @@ void changeUpdateMessage(void* args)
     messageVar = 1;
     pthread_mutex_unlock(&message);
     pthread_mutex_unlock(&mut);
-
-    //}
 }
+
+
+void listenClient(void * args)
+{
+    char xstr[10];
+    char ystr[10];
+    char vxstr[10];
+    char vystr[10];
+    char poussstr[10];
+    char rotstr[10];
+    char scorestr[10];
+    char collisionMessage[24];
+    char x[5];
+    char y[5];
+    char s[5];
+    char direct[5];
+    //char ignoreMessage[24] = "IGNORE/";
+    char Buffer[128];
+    //int ignore = 0;
+    int j,retval1,retval;
+    int tmpcpt, cpt, i, l, cptScore, tmpcoll, pouss;
+    double xnum, ynum, vxnum, vynum, distance, distColl, tmpvx, tmpvy, rotations, force, angle;
+    int snum;
+    Player *p = (Player *)args;
+    Planete *pl1;
+    Planete *pl2;
+    clock_t timer = clock();
+    double d1, d2, dEcart;
+
+    while(1){
+
+        if((clock()-timer) > freq && phase && messageVar && !p->deleted){
+
+            pthread_mutex_lock(&message);
+            /*if(ignore){
+                retval1 = send(p->sock, ignoreMessage, 24, 0);
+                ignore = 0;
+            }*/
+            //printf("SENDING : %s \n", updatesMessageSend);
+            retval1 = send(p->sock, updatesMessageSend, ((2*game->nbPlayers)+1)*24, 0);
+            pthread_mutex_unlock(&message);
+            pthread_mutex_lock(&planetesMut);
+            retval1 = send(p->sock, planetesMessage, sizeof(planetesMessage), 0);
+            pthread_mutex_unlock(&planetesMut);
+            //printf("SENDING : %s \n", teleportMessage);
+            retval1 = send(p->sock, teleportMessage, sizeof(teleportMessage), 0);
+
+            memset(xstr, '\0', sizeof(xstr));
+            memset(ystr, '\0', sizeof(ystr));
+            memset(vxstr, '\0', sizeof(vxstr));
+            memset(vystr, '\0', sizeof(vystr));
+            memset(poussstr, '\0', sizeof(poussstr));
+            memset(rotstr, '\0', sizeof(rotstr));
+            memset(scorestr, '\0', sizeof(scorestr));
+            memset(Buffer, '\0', sizeof(Buffer));
+            retval = recv(p->sock, Buffer, sizeof(Buffer), 0);
+            if (retval == SOCKET_ERROR || retval == 0)
+                  {
+                char msg[24];
+                memset(msg, '_', sizeof(msg));
+                msg[0] = 'P';
+                msg[1] = 'L';
+                msg[2] = 'A';
+                msg[3] = 'Y';
+                msg[4] = 'E';
+                msg[5] = 'R';
+                msg[6] = 'L';
+                msg[7] = 'E';
+                msg[8] = 'F';
+                msg[9] = 'T';
+                msg[10] = '/';
+
+                cpt = 0;
+                while(p->name[cpt] != '/'){
+                    msg[11+cpt] = p->name[cpt];
+                    cpt++;
+                }
+                msg[11+cpt] = '/';
+
+                Player *precedent = NULL;
+                Player * tmp = game->players;
+                int depasse = 0;
+                while(tmp != NULL){
+                    if(tmp != p){
+                        if (tmp->next == p)
+                            precedent = tmp;
+                        if(depasse){
+                            tmp->num--;
+                        }
+
+                        retval1 = send(tmp->sock, msg, sizeof(msg), 0);
+                    }
+                    else{
+                        depasse = 1;
+                    }
+                    tmp = tmp->next;
+                }
+                if(precedent == NULL)
+                    game->players = p->next;
+                else{
+                    precedent->next = p->next;
+                    game->players = precedent;
+                }
+                game->nbPlayers--;
+                messageVar = 0;
+                changeUpdateMessage();
+                p->deleted = 1;
+                //closesocket(p->sock);
+            }
+           else
+                //printf("RECEIVING UPDATE : %s .\n", Buffer);
+
+            if (retval == 0)
+            {
+                printf("Server: Client closed connection.\n");
+                closesocket(p->sock);
+
+            }
+
+            cpt=0;
+            while((cpt < sizeof(Buffer)) && (Buffer[cpt] != '/'))
+            {
+                cpt ++;
+            }
+            cpt ++;
+            tmpcpt = cpt;
+            while((cpt < sizeof(Buffer)) && (Buffer[cpt] != '/'))
+            {
+                xstr[cpt - tmpcpt] = Buffer[cpt];
+                cpt ++;
+            }
+            xnum = atof(xstr);
+
+            cpt ++;
+            tmpcpt = cpt;
+            while((cpt < sizeof(Buffer)) && (Buffer[cpt] != '/'))
+            {
+                ystr[cpt - tmpcpt] = Buffer[cpt];
+                cpt++;
+            }
+            ynum = atof(ystr);
+            cpt++;
+            tmpcpt = cpt;
+            while((cpt < sizeof(Buffer)) && (Buffer[cpt] != '/'))
+            {
+                scorestr[cpt - tmpcpt] = Buffer[cpt];
+                cpt++;
+            }
+            scorestr[cpt - tmpcpt] ='\0';
+            snum = atoi(scorestr);
+            cpt++;
+            tmpcpt = cpt;
+            while((cpt < sizeof(Buffer)) && (Buffer[cpt] != '/') && (Buffer[cpt] != '/0') )
+            {
+                vxstr[cpt - tmpcpt] = Buffer[cpt];
+                cpt++;
+            }
+            vxnum = atof(vxstr);
+
+            cpt++;
+            tmpcpt = cpt;
+            while((cpt < sizeof(Buffer)) && (Buffer[cpt] != '/')&& (Buffer[cpt] != '/0'))
+            {
+                vystr[cpt - tmpcpt] = Buffer[cpt];
+                cpt++;
+            }
+            vynum = atof(vystr);
+            cpt++;
+            while((cpt < sizeof(Buffer)) && (Buffer[cpt] != '/')&& (Buffer[cpt] != '/0'))//parsing COMMS/A
+            {
+                cpt++;
+            }
+            cpt++;
+            cpt++;
+            tmpcpt = cpt;
+            while((cpt < sizeof(Buffer)) && (Buffer[cpt] != 'T')&& (Buffer[cpt] != '/0') )
+            {
+                if((cpt-tmpcpt < 10))
+                    rotstr[cpt - tmpcpt] = Buffer[cpt];
+                cpt++;
+            }
+            rotations = atof(rotstr);
+            cpt++;
+            tmpcpt = cpt;
+            while((cpt < sizeof(Buffer)) && (Buffer[cpt] != '/'))
+            {
+                poussstr[cpt - tmpcpt] = Buffer[cpt];
+                cpt++;
+            }
+            pouss = atoi(poussstr);
+            if(pouss != 0 || rotations != 0){
+                 p->vx += pouss*(0.5*cos(p->dir));
+                 p->vy += pouss*(0.5*sin(p->dir));
+                 p->dir += rotations ;
+            }
+            movePlayers(p);
+            /*dEcart = sqrt((xnum - p->x)*(xnum - p->y) - (ynum - p->y)*(ynum - p->y));
+            printf("client : %f  :  %f  / SERVEUR : %f  :  %f \n", xnum, ynum, p->x, p->y);
+            if(dEcart < 10){
+                ignore = 1;
+                p->x = xnum;
+                p->y = ynum;
+            }*/
+
+            timer = clock();
+        }
+    }
+}
+
+
+void movePlayers(Player * p){
+
+    Planete *pl1;
+    Planete *pl2;
+    double d1, d2, force, angle;
+    char xstr[10];
+    char ystr[10];
+    char vxstr[10];
+    char vystr[10];
+    char scorestr[10];
+    char x[5];
+    char y[5];
+    char s[5];
+    char direct[5];
+    int j, cptScore;
+    //attraction
+    if(!p->deleted){
+        pl1 = game->planetes;
+        pl2 = pl1->next;
+        d1 = sqrt((pl1->x - p->x)*(pl1->x - p->x) + (pl1->y - p->y)*(pl1->y - p->y));
+        d2 = sqrt((pl2->x - p->x)*(pl2->x - p->x) + (pl2->y - p->y)*(pl2->y - p->y));
+        if( p->crashed1 == 0 && p->crashed2 == 0) {
+            if(d1<30) {
+              if(!p->justUnstuck1) {
+                  p->crashed1 = 1;
+                  p->crashTime1 = clock();
+                  p->vx = 0;
+                  p->vy = 0;
+                  send(p->sock, "CRASHED/________________", 24, 0);
+              }
+            }
+            else {
+              if(d1 < 180 && !p->justUnstuck2) {
+                force = 200/(d1*d1);
+                angle = atan2(abs(pl1->x-p->x), abs(pl1->y-p->y));
+
+                p->vx += (force * cos(angle));
+                p->vy += (force * sin(angle));
+
+              }
+              else {
+                  if(p->justUnstuck1)
+                      p->justUnstuck1 = 0;
+              }
+            }
+            if(d2<40 ) {
+              if(!p->justUnstuck2) {
+                  p->crashed2 = 1;
+                  p->crashTime2 = clock();
+                  p->vx = 0;
+                  p->vy = 0;
+                  send(p->sock, "CRASHED/________________", 24, 0);
+              }
+            }
+            else {
+
+              if(d2 < 200 && !p->justUnstuck2) {
+                force = 300/(d2*d2);
+                angle = atan2(abs(pl2->x-p->x), abs(pl2->y-p->y));
+                p->vx += (force * cos(angle));
+                p->vy += (force * sin(angle));
+              }
+              else {
+                  if(p->justUnstuck2)
+                      p->justUnstuck2 = 0;
+              }
+            }
+        }
+
+
+
+        p->vx = min(25, p->vx);
+        p->vx = max(-25, p->vx);
+        p->vy = min(25, p->vy);
+        p->vy = max(-25, p->vy);
+        p->x = fmod(p->x + p->vx + MAP_SIZE, MAP_SIZE);
+        p->y = fmod(p->y + p->vy + MAP_SIZE, MAP_SIZE);
+
+        checkCollisions(p);
+        checkTeleport(p);
+        if(p->crashed1 ) {
+          p->x = pl1->x;
+          p->y = pl1->y;
+          if((clock() - p->crashTime1)/CLOCKS_PER_SEC > 5) {
+             send(p->sock, "REPAIRED/_______________", 24, 0);
+              p->crashed1 = 0;
+              p->justUnstuck1 = 1;
+              p->vx += 6*(0.5*cos(p->dir));
+              p->vy +=  6*(0.5*sin(p->dir));
+          }
+        }
+        if(p->crashed2 > 0) {
+          p->x = pl2->x;
+          p->y = pl2->y;
+          if((clock()-p->crashTime2)/CLOCKS_PER_SEC > 5) {
+              send(p->sock, "REPAIRED/_______________", 24, 0);
+              p->crashed2 = 0;
+              p->justUnstuck2 = 1;
+              p->vx += (6*0.5*cos(p->dir));
+              p->vy =  (6*0.5*sin(p->dir));
+          }
+        }
+
+        memset(vxstr, '\0', sizeof(vxstr));
+        memset(vystr, '\0', sizeof(vystr));
+        sprintf(vxstr, "%f", p->vx);
+        sprintf(vystr, "%f", p->vy);
+        vxstr[6] = '/';
+        vystr[6] = '/';
+
+        memset(scorestr, '\0', sizeof(scorestr));
+        memset(x, '\0', sizeof(x));
+        memset(y, '\0', sizeof(y));
+        memset(direct, '\0', sizeof(direct));
+        memset(s, '\0', sizeof(s));
+        pthread_mutex_lock(&message);
+        //int length = ((2*game->nbPlayers)+1)*24;
+        //printf("test 1 \n");
+        //char updatesMessage [length];
+
+        /*for(int cptcpy=0;cptcpy<length;cptcpy++) {
+            printf("test 1 \n");
+            updatesMessage [cptcpy] = updatesMessageSend[cptcpy];
+        }*/
+        j=0;
+        while(p->name[j] != '/')
+        {
+            //updatesMessageSend[((p->num+1)*24)+j] = p->name[j];
+            //updatesMessageSend[((game->nbPlayers)*24)+(i*24)+j] = p->name[j];
+            j++;
+        }
+        //updatesMessageSend[((p->num+1)*24)+j] = 'X';
+        //updatesMessageSend[((game->nbPlayers)*24)+((p->num+1)*24)+j] = ':';
+        j++;
+        sprintf(x, "%f", p->x);
+        //sprintf(direct, "%f", p->dir);
+        sprintf(s, "%d/", p->score);
+        cptScore = j;
+        int cpts = 0;
+        while(s[cpts] != '/')
+        {
+            updatesMessageSend[((game->nbPlayers)*24)+((p->num+1)*24)+cptScore] = s[cpts];
+            cptScore++;
+            cpts++;
+        }
+        updatesMessageSend[((game->nbPlayers)*24)+((p->num+1)*24)+cptScore] = '|';
+        cptScore++;
+        cpts = 0;
+        while(vxstr[cpts] !='/')
+        {
+            if(vxstr[cpts] != '\0')
+                updatesMessageSend[((game->nbPlayers)*24)+((p->num+1)*24)+cptScore] = vxstr[cpts];
+            cptScore++;
+            cpts++;
+        }
+        updatesMessageSend[((game->nbPlayers)*24)+((p->num+1)*24)+cptScore] = '|';
+        cptScore++;
+        cpts = 0;
+        while(vystr[cpts] !='/')
+        {
+            if(vystr[cpts] != '\0')
+                updatesMessageSend[((game->nbPlayers)*24)+((p->num+1)*24)+cptScore] = vystr[cpts];
+            cptScore++;
+            cpts++;
+        }
+        for(int k=0; k<sizeof(x);k++)
+        {
+            if(x[k] != '\0')
+                updatesMessageSend[((p->num+1)*24)+j] = x[k];
+        j++;
+        }
+        //updatesMessage[((p->num+1)*24)+j] = 'Y';
+        j++;
+        sprintf(y, "%f", p->y);
+        for(int k=0; k<sizeof(y);k++)
+        {
+             if(y[k] != '\0')
+                updatesMessageSend[((p->num+1)*24)+j] = y[k];
+        j++;
+        }
+        j++;
+        /*for(int k=0; k<sizeof(direct);k++)
+        {
+             if(direct[k] != '\0')
+                updatesMessageSend[((p->num+1)*24)+j] = direct[k];
+        j++;
+        }*/
+        updatesMessageSend[((p->num+1)*24)+j] = '|';
+        updatesMessageSend[((game->nbPlayers)*24)+((p->num+1)*24)+cptScore] = '|';
+        pthread_mutex_unlock(&message);
+    }
+}
+
+
 
 
 void ecoute(void * args)
@@ -602,7 +692,7 @@ void ecoute(void * args)
     msg[7] = 'Y';
     msg[8] = 'E';
     msg[9] = 'R';
-    msg[10] = ' ';
+    msg[10] = '/';
 
 
 
@@ -620,6 +710,7 @@ void ecoute(void * args)
             cpt++;
         }
         name[cpt-i-1] = Buffer[cpt];
+        msg[cpt-i+10] = Buffer[cpt];
 
         float randx = rc->x;
         float randy = rc->y;
@@ -638,7 +729,7 @@ void ecoute(void * args)
             }
         }
         if(joueurExiste){
-            retval1 = send(msgsock, "ERR/name_taken__________", 24, 0);
+            retval1 = send(msgsock, "DENIED/_________________", 24, 0);
         }
         else{
             Player *player = makePlayer(name, msgsock, randx,randy, game->nbPlayers) ;
@@ -660,7 +751,7 @@ void ecoute(void * args)
             addPlayer(game, player);
             pthread_mutex_unlock(&mut);
 
-            pthread_create (& th, NULL,changeUpdateMessage, NULL);
+            changeUpdateMessage();
             pthread_create (& th, NULL,listenClient, (void*)player);
             char scores[(game->nbPlayers+1)*24];
             memset(scores, '_', sizeof(scores));
@@ -760,16 +851,13 @@ void ecoute(void * args)
             pthread_mutex_lock(&mutObj);
             gcvt(game->obj->x, 6, xobj);
             gcvt(game->obj->y, 6, yobj);
-            newObjMessage[0] = 'O';
-            newObjMessage[1] = 'B';
-            newObjMessage[2] = 'J';
-            newObjMessage[3] = 'E';
-            newObjMessage[4] = 'C';
-            newObjMessage[5] = 'T';
-            newObjMessage[6] = 'I';
-            newObjMessage[7] = 'V';
-            newObjMessage[8] = 'E';
-            newObjMessage[9] = '/';
+            newObjMessage[0] = 'N';
+            newObjMessage[1] = 'E';
+            newObjMessage[2] = 'W';
+            newObjMessage[3] = 'O';
+            newObjMessage[4] = 'B';
+            newObjMessage[5] = 'J';
+            newObjMessage[6] = '/';
             newObjMessage[24] = 'x';
 
             int l=25;
@@ -791,44 +879,177 @@ void ecoute(void * args)
         }
 
         while(1){
-            //printf("testBoucle\n");
             Sleep(1000);
         }
     }
 }
 
-void checkCollisions(void *args){
-    Player * tmp1;
-    Player * tmp2;
+
+
+
+void checkObjectives(void *args){
+    Player * p;
+    char xobj[10];
+    char yobj[10];
+    char newObjMessage[48];
+    int l,i, retval1;
+    float xfobj, yfobj;
     double distance;
     while(1){
-        if(game->players != NULL){
-            tmp1 = game->players;
-            while(tmp1!=NULL){
-                tmp2 = game->players;
-                while(tmp2 != NULL){
-                    if((tmp1 != tmp2) && (tmp1->coll == 0) && (tmp2 ->coll == 0)){
-                        pthread_mutex_lock(&collision);
-                        distance = sqrt(((tmp2->x + tmp2->vx) - (tmp1->x + tmp1->vx))*((tmp2->x + tmp2->vx) - (tmp1->x + tmp1->vx)) + ((tmp2->y + tmp2->vy) - (tmp1->y + tmp1->vy))*((tmp2->y + tmp2->vy) - (tmp1->y + tmp1->vy)));
-                        if(distance < 2){
-                            printf("collision detected");
-                            tmp1->vxcoll = tmp2->vx;
-                            tmp1->vycoll = tmp2->vy;
-                            tmp1->coll = 1;
-                            tmp2->vxcoll = tmp1->vx;
-                            tmp2->vycoll = tmp1->vy;
-                            tmp2->coll = 1;
-                            /*tmp1->vx = tmp2->vx;
-                            tmp1->vy = tmp2->vy;
-                            tmp2->vx = tmpvx;
-                            tmp2->vy = tmpvy;*/
-                        }
-                        pthread_mutex_unlock(&collision);
+        if(game->players != NULL && phase && messageVar){
+            p = game->players;
+            while(p!=NULL){
+                distance = sqrt((game->obj->x-p->x)*(game->obj->x-p->x) + (game->obj->y-p->y)*(game->obj->y-p->y));
+                if(distance<50)
+                {
+                    memset(xobj, '\0', sizeof(xobj));
+                    memset(yobj, '\0', sizeof(yobj));
+                    memset(newObjMessage, '_', sizeof(newObjMessage));
+                    xfobj = ((float)rand()/(float)(RAND_MAX))*MAP_SIZE;
+                    yfobj = ((float)rand()/(float)(RAND_MAX))*MAP_SIZE;
+                    Objectif * obj = makeObjectif(xfobj,yfobj);
+                    pthread_mutex_lock(&mutObj);
+                    game->obj = obj;
+                    gcvt(xfobj, 6, xobj);
+                    gcvt(yfobj, 6, yobj);
+                    newObjMessage[0] = 'N';
+                    newObjMessage[1] = 'E';
+                    newObjMessage[2] = 'W';
+                    newObjMessage[3] = 'O';
+                    newObjMessage[4] = 'B';
+                    newObjMessage[5] = 'J';
+                    newObjMessage[6] = '/';
+                    newObjMessage[24] = 'x';
+                    l=25;
+                    for(int k = 0; k<sizeof(xobj);k++)
+                    {
+                        newObjMessage[l]=xobj[k];
+                        l++;
                     }
-                    tmp2 = tmp2->next;
+                    newObjMessage[l] = 'y';
+                    l++;
+                    for(int k = 0; k<sizeof(yobj); k++)
+                    {
+                        newObjMessage[l]=yobj[k];
+                        l++;
+                    }
+                    newObjMessage[l]='/';
+                    if(game->players != NULL){
+                        Player * tmp2 = game->players;
+                        while(tmp2 != NULL){
+                            retval1 = send(tmp2->sock, newObjMessage, sizeof(newObjMessage), 0);
+                            if (retval1 == SOCKET_ERROR)
+                            {
+                                 fprintf(stderr,"Server: send() failed: error %d\n", WSAGetLastError());
+                            }
+                            tmp2 = tmp2->next;
+                        }
+                    }
+                    p->score ++;
+                    pthread_mutex_unlock(&mutObj);
+                    if(p->score >= 5){
+                        char messageWin[24];
+                        messageWin[0] = 'W';
+                        messageWin[1] = 'I';
+                        messageWin[2] = 'N';
+                        messageWin[3] = 'N';
+                        messageWin[4] = 'E';
+                        messageWin[5] = 'R';
+                        messageWin[6] = '/';
+                        i = 0;
+                        while(p->name[i]!='/')
+                        {
+                            messageWin[i+7] = p->name[i];
+                            i++;
+                        }
+                        messageWin[i+7] = '/';
+                        if(game->players != NULL){
+                            Player * tmp2 = game->players;
+                            while(tmp2 != NULL){
+                                retval1 = send(tmp2->sock, messageWin, 24, 0);
+                                if (retval1 == SOCKET_ERROR)
+                                {
+                                     fprintf(stderr,"Server: send() failed: error %d\n", WSAGetLastError());
+                                }
+                                tmp2 = tmp2->next;
+                            }
+                        }
+                        phase = 0;
+                        pthread_create (& th, NULL,attente, NULL);
+                    }
                 }
-                tmp1 = tmp1->next;
+                p = p->next;
             }
+        }
+    }
+}
+
+
+
+void checkTeleport(Player *p){
+    double dt1, dt2;
+    pthread_mutex_lock(&teleportLock);
+    if(game->players != NULL && phase && messageVar && isTeleporter){
+        dt1 = sqrt((teleportx1 - p->x)*(teleportx1 - p->x) + (teleporty1 - p->y)*(teleporty1 - p->y));
+        dt2 = sqrt((teleportx2 - p->x)*(teleportx2 - p->x) + (teleporty2 - p->y)*(teleporty2 - p->y));
+        //printf("teleport distances : %f, %f \n", dt1, dt2);
+        if(! p ->justTeleported){
+            if(dt1<50) {
+                if(!p->justTeleported) {
+                  p->justTeleported = 1;
+                  p->x = teleportx2;
+                  p->y = teleporty2;
+                }
+            }
+            if(dt2<50) {
+                if(!p->justTeleported) {
+                  p->justTeleported = 1;
+                  p->x = teleportx1;
+                  p->y = teleporty1;
+                }
+            }
+        }
+        else{
+            if(dt1>70 && dt2>70)
+                p->justTeleported = 0;
+        }
+    }
+    pthread_mutex_unlock(&teleportLock);
+}
+
+void checkCollisions(Player *tmp1){
+    Player * tmp2;
+    double distance, tmpvx, tmpvy;
+    if(game->players != NULL && phase && messageVar){
+        tmp2 = game->players;
+        if(tmp1->coll == 0){
+            while(tmp2 != NULL){
+                if((tmp1 != tmp2) && (tmp2 ->coll == 0)){
+                    pthread_mutex_lock(&collision);
+                    distance = sqrt(((tmp2->x + tmp2->vx) - (tmp1->x + tmp1->vx))*((tmp2->x + tmp2->vx) - (tmp1->x + tmp1->vx)) + ((tmp2->y + tmp2->vy) - (tmp1->y + tmp1->vy))*((tmp2->y + tmp2->vy) - (tmp1->y + tmp1->vy)));
+                    //printf("collision distance : %f \n", distance);
+                    if(distance < 50){
+                        printf("collision detected \n");
+                        /*tmp1->vxcoll = tmp2->vx;
+                        tmp1->vycoll = tmp2->vy;
+                        tmp1->coll = 1;
+                        tmp2->vxcoll = tmp1->vx;
+                        tmp2->vycoll = tmp1->vy;*/
+                        tmp2->coll = 1;
+                        tmpvx = tmp1->vx;
+                        tmpvy = tmp1->vy;
+                        tmp1->vx = tmp2->vx;
+                        tmp1->vy = tmp2->vy;
+                        tmp2->vx = tmpvx;
+                        tmp2->vy = tmpvy;
+                    }
+                    pthread_mutex_unlock(&collision);
+                }
+                tmp2 = tmp2->next;
+            }
+        }
+        else{
+            tmp1->coll = 0;
         }
     }
 }
@@ -841,7 +1062,6 @@ void socketsListen(void * args)
     struct sockaddr_in local, from;
     int fromlen;
     while(1){
-
         RandCoords * newrc = makeRandCoord();
         newrc->x = ((float)rand()/(float)(RAND_MAX))*MAP_SIZE;
         newrc->y = ((float)rand()/(float)(RAND_MAX))*MAP_SIZE;
@@ -898,6 +1118,7 @@ void movePlanetes(void * args)
                 sprintf(xstr,"%f",pl->x);
                 xstr[9] = '/';
                 k=0;
+                pthread_mutex_lock(&planetesMut);
                 while(xstr[k]!='/'){
                     if( xstr[k] != '\0')
                         planetesMessage [24*i+j] = xstr[k];
@@ -923,6 +1144,7 @@ void movePlanetes(void * args)
                     j++;
                 }
                 planetesMessage [24*i+j] = '/';
+                pthread_mutex_unlock(&planetesMut);
                 pl = pl->next;
                 i++;
             }
@@ -951,11 +1173,13 @@ void teleporter(void * args){
         if(!isTeleporter){
 
              if(ran < 0.3 ){
-                    printf("new teleporter\n");
-                    x1 = ((float)rand()/(float)(RAND_MAX))*MAP_SIZE;
-                    x2 = ((float)rand()/(float)(RAND_MAX))*MAP_SIZE;
-                    y1 = ((float)rand()/(float)(RAND_MAX))*MAP_SIZE;
-                    y2 = ((float)rand()/(float)(RAND_MAX))*MAP_SIZE;
+                    pthread_mutex_lock(&teleportLock);
+                    do{
+                        x1 = ((float)rand()/(float)(RAND_MAX))*50;
+                        x2 = ((float)rand()/(float)(RAND_MAX))*50;
+                        y1 = ((float)rand()/(float)(RAND_MAX))*50;
+                        y2 = ((float)rand()/(float)(RAND_MAX))*50;
+                    }while(sqrt((x2-x1)*(x2-x1) + (y2-y1)*(y2-y1))< 10 );
                     memset(x1str, '0', sizeof(x1str));
                     memset(y1str, '0', sizeof(y1str));
                     memset(x2str, '0', sizeof(x2str));
@@ -990,8 +1214,6 @@ void teleporter(void * args){
                         i++;
                     }
                     teleportMessage [24 + i] = '/';
-
-
                     i=0;
                     cpt = 0;
                     while(x2str[cpt]!='/'){
@@ -1015,14 +1237,20 @@ void teleporter(void * args){
                     }
                     teleportMessage [48 + i] = '/';
                     teleportMessage[4]='Y';
+                    pthread_mutex_unlock(&teleportLock);
+                    teleportx1 = x1*20;
+                    teleportx2 = x2*20;
+                    teleporty1 = y1*20;
+                    teleporty2 = y2*20;
                     isTeleporter = 1;
              }
         }
         else{
             if(ran < 0.05 ){
-                    printf("deleting... \n");
+                    pthread_mutex_unlock(&teleportLock);
                     teleportMessage[4]='N';
                     isTeleporter = 0;
+                    pthread_mutex_unlock(&teleportLock);
              }
         }
         Sleep(1000);
@@ -1035,10 +1263,13 @@ int main(int argc, char **argv){
     mut = pthread_mutex_init(&mut, NULL);
     mutObj = pthread_mutex_init(&mutObj, NULL);
     collision = pthread_mutex_init(&collision, NULL);
+    planetesMut = pthread_mutex_init(&planetesMut, NULL);
+    teleportLock = pthread_mutex_init(&teleportLock, NULL);
     pthread_t th, th1;
     char Buffer[128];
     char BufferSend[128];
     char *ip_address= NULL;
+    pthread_t thPlanetes;
     unsigned short port=DEFAULT_PORT;
     int retval;
     int fromlen;
@@ -1050,11 +1281,12 @@ int main(int argc, char **argv){
     float xfobj = ((float)rand()/(float)(RAND_MAX))*MAP_SIZE;
     float yfobj = ((float)rand()/(float)(RAND_MAX))*MAP_SIZE;
     Objectif * obj = makeObjectif(xfobj,yfobj);
-    Planete * p1 = makePlanete(((float)rand()/(float)(RAND_MAX))*MAP_SIZE,((float)rand()/(float)(RAND_MAX))*MAP_SIZE,((float)rand()/(float)(RAND_MAX))*0.00001,((float)rand()/(float)(RAND_MAX))*0.00001);
-    Planete * p2 = makePlanete(((float)rand()/(float)(RAND_MAX))*MAP_SIZE,((float)rand()/(float)(RAND_MAX))*MAP_SIZE,((float)rand()/(float)(RAND_MAX))*0.00001,((float)rand()/(float)(RAND_MAX))*0.00001);
-    pthread_create (& th, NULL,movePlanetes, NULL);
-    pthread_create (& th, NULL,teleporter, NULL);
-    pthread_create (& th, NULL,checkCollisions, NULL);
+    Planete * p1 = makePlanete(((float)rand()/(float)(RAND_MAX))*MAP_SIZE,((float)rand()/(float)(RAND_MAX))*MAP_SIZE,((float)rand()/(float)(RAND_MAX))*0.0001,((float)rand()/(float)(RAND_MAX))*0.0001);
+    Planete * p2 = makePlanete(((float)rand()/(float)(RAND_MAX))*MAP_SIZE,((float)rand()/(float)(RAND_MAX))*MAP_SIZE,((float)rand()/(float)(RAND_MAX))*0.0001,((float)rand()/(float)(RAND_MAX))*0.0001);
+    pthread_create ( &thPlanetes, NULL,movePlanetes, NULL);
+    pthread_create ( &th, NULL,teleporter, NULL);
+    //pthread_create ( &th, NULL, movePlayers, NULL);
+    pthread_create ( &th, NULL, checkObjectives, NULL);
     p1->next = p2;
     game->planetes = p1;
     game->obj = obj;
@@ -1130,7 +1362,7 @@ int main(int argc, char **argv){
         }
     }
 
-    pthread_create (& th, NULL,allMessageStart, NULL);
+    allMessageStart();
     Sleep(1);
 
     if(th_list->head != NULL){
@@ -1140,6 +1372,7 @@ int main(int argc, char **argv){
             tmp_t = tmp_t->next;
         }
     }
+    //pthread_join (thPlanetes, NULL);
 
 
     return 0;

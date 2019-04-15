@@ -1,5 +1,5 @@
 # depslib dependency file v1.0
-1555025819 source:d:\tomcat\apache-tomcat-7.0.90\webapps\server_en_c\main.c
+1555305226 source:d:\tomcat\apache-tomcat-7.0.90\webapps\server_en_c\main.c
 	<winsock2.h>
 	<windows.h>
 	<pthread.h>
@@ -157,7 +157,7 @@
 1023181768 source:d:\tomcat\apache-tomcat-7.0.90\webapps\server_en_c\threadlist.c
 	"fthread_internal.h"
 
-1554940270 source:d:\tomcat\apache-tomcat-7.0.90\webapps\server_en_c\game.c
+1555279279 source:d:\tomcat\apache-tomcat-7.0.90\webapps\server_en_c\game.c
 	<stdio.h>
 	<stdlib.h>
 	<string.h>
@@ -166,7 +166,7 @@
 	<pthread.h>
 	"game.h"
 
-1554801535 d:\tomcat\apache-tomcat-7.0.90\webapps\server_en_c\game.h
+1555279265 d:\tomcat\apache-tomcat-7.0.90\webapps\server_en_c\game.h
 
 1554483231 source:d:\tomcat\apache-tomcat-7.0.90\webapps\server_en_c\tmp.c
 	<winsock2.h>
@@ -182,4 +182,6 @@
 	"linked_list.h"
 	"thread_list.h"
 	"game.h"
+
+1555242597 source:d:\tomcat\apache-tomcat-7.0.90\webapps\server_en_c\main1.c
 
