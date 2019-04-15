@@ -72,10 +72,10 @@ void messageStart(void * args)
          fprintf(stderr,"Server: send() failed: error %d\n", WSAGetLastError());
     }
 }
-void allMessageStart()
+void allMessageStart(void *args)
 {
     int retval1;
-    char str[24] = "START/";
+    char str[24] = "SESSION/";
     if (game->players !=NULL){
         Player *tmp = game->players;
         while(tmp != NULL){
@@ -98,7 +98,7 @@ void attente(void * args){
     while((clock()-start)/CLOCKS_PER_SEC < 5 ){
         Sleep(1000);
     }
-   allMessageStart();
+   pthread_create(&th,NULL,allMessageStart,NULL);
 }
 
 void changeUpdateMessage()
@@ -277,13 +277,13 @@ void listenClient(void * args)
                 retval1 = send(p->sock, ignoreMessage, 24, 0);
                 ignore = 0;
             }*/
-            //printf("SENDING : %s \n", updatesMessageSend);
+            printf("SENDING : %s \n", updatesMessageSend);
             retval1 = send(p->sock, updatesMessageSend, ((2*game->nbPlayers)+1)*24, 0);
             pthread_mutex_unlock(&message);
             pthread_mutex_lock(&planetesMut);
             retval1 = send(p->sock, planetesMessage, sizeof(planetesMessage), 0);
             pthread_mutex_unlock(&planetesMut);
-            //printf("SENDING : %s \n", teleportMessage);
+            printf("SENDING : %s \n", teleportMessage);
             retval1 = send(p->sock, teleportMessage, sizeof(teleportMessage), 0);
 
             memset(xstr, '\0', sizeof(xstr));
@@ -349,7 +349,7 @@ void listenClient(void * args)
                 //closesocket(p->sock);
             }
            else
-                //printf("RECEIVING UPDATE : %s .\n", Buffer);
+                printf("RECEIVING UPDATE : %s .\n", Buffer);
 
             if (retval == 0)
             {
@@ -1362,7 +1362,7 @@ int main(int argc, char **argv){
         }
     }
 
-    allMessageStart();
+    pthread_create(&th,NULL,allMessageStart,NULL);
     Sleep(1);
 
     if(th_list->head != NULL){
